@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:context="http://www.springframework.org/schema/context"
+    xmlns:tx="http://www.springframework.org/schema/tx" xmlns:rabbit="http://www.springframework.org/schema/rabbit"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+    http://www.springframework.org/schema/tx http://www.springframework.org/schema/tx/spring-tx-4.1.xsd 
+    http://www.springframework.org/schema/context   http://www.springframework.org/schema/context/spring-context-4.1.xsd
+    http://www.springframework.org/schema/rabbit http://www.springframework.org/schema/rabbit/spring-rabbit.xsd">
+
+    <context:component-scan base-package="start.web" />
+    
+    <context:property-placeholder location="classpath:users.db.properties, classpath:users.rabbit.properties" />
+
+    <!-- data source -->
+    <bean id="profileDataSource" class="org.springframework.jdbc.datasource.DriverManagerDataSource">
+        <property name="driverClassName" value="${datasource.driver}" />
+        <property name="url" value="${datasource.url}" />
+        <property name="username" value="${datasource.username}" />
+        <property name="password" value="${datasource.password}" />
+    </bean> 
+
+    <!-- Hibernate SessionFactory -->
+    <bean id="profileSessionFactory"
+        class="org.springframework.orm.hibernate5.LocalSessionFactoryBean">
+        <property name="dataSource" ref="profileDataSource"></property>
+        <property name="hibernateProperties">
+            <props>
+                <prop key="hibernate.dialect">${hibernate.dialect}</prop>
+                <prop key="hibernate.id.new_generator_mappings">${hibernate.id.new_generator_mappings}</prop>
+                <prop key="hibernate.hbm2ddl.auto">${hibernate.hbm2ddl.auto}</prop>
+                <prop key="hibernate.show_sql">${hibernate.show_sql}</prop>
+                <prop key="hibernate.connection.zeroDateTimeBehavior">convertToNull</prop>
+            </props>
+        </property>
+        <property name="packagesToScan" value="start.web.model.registration"></property>
+    </bean>
+    
+    <!-- The transaction manager -->
+    <tx:annotation-driven transaction-manager="transactionManager" />
+    <bean id="transactionManager"
+        class="org.springframework.orm.hibernate5.HibernateTransactionManager">
+        <property name="sessionFactory" ref="profileSessionFactory" />
+    </bean>
+    
+    <!-- Rabbit connections beans -->
+    <rabbit:connection-factory id="emailAccountConnectionFactory" host="${users.host}"/>
+    
+	<rabbit:template id="amqpTemplate" connection-factory="emailAccountConnectionFactory"
+		exchange="${users.account.exchange}" routing-key="${users.account.routingKey}"/>
+
+	<!--  <rabbit:admin connection-factory="emailAccountConnectionFactory" />-->
+
+	<rabbit:queue id="emailAccount" name="${users.account.queue.name}"/>
+
+	<rabbit:direct-exchange name="${users.account.exchange}">
+		<rabbit:bindings>
+			<rabbit:binding queue="emailAccount" key="${users.account.routingKey}" />
+		</rabbit:bindings>
+	</rabbit:direct-exchange>
+
+
+	<rabbit:listener-container connection-factory="emailAccountConnectionFactory" acknowledge="none">
+		<rabbit:listener ref="emailAccountAckListener" queue-names="${users.account.queue.name}" />
+	</rabbit:listener-container>
+
+</beans>
